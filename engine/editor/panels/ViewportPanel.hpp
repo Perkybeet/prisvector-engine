@@ -7,6 +7,7 @@
 #include "renderer/shadows/ShadowMapSystem.hpp"
 #include "renderer/debug/DebugRenderer.hpp"
 #include "renderer/GridRenderer.hpp"
+#include "renderer/EditorIconRenderer.hpp"
 #include "renderer/opengl/GLShader.hpp"
 #include "renderer/opengl/GLVertexArray.hpp"
 
@@ -40,6 +41,7 @@ private:
     Engine::Ref<Engine::VertexArray> m_ScreenQuadVAO;
     Engine::DebugRenderer* m_DebugRenderer;
     Engine::Scope<Engine::GridRenderer> m_GridRenderer;
+    Engine::Scope<Engine::EditorIconRenderer> m_IconRenderer;
 
     glm::vec2 m_ViewportSize{0.0f};
     glm::vec2 m_ViewportBounds[2];

@@ -28,6 +28,14 @@ enum class PlayState {
     Pause
 };
 
+struct SymmetrySettings {
+    bool Enabled = false;
+    bool MirrorX = false;
+    bool MirrorY = false;
+    bool MirrorZ = false;
+    glm::vec3 Origin{0.0f};
+};
+
 struct EditorContext {
     // Selection
     entt::entity SelectedEntity = entt::null;
@@ -43,6 +51,9 @@ struct EditorContext {
 
     // Play state
     PlayState State = PlayState::Edit;
+
+    // Symmetry
+    SymmetrySettings Symmetry;
 
     // Viewport state
     bool ViewportFocused = false;

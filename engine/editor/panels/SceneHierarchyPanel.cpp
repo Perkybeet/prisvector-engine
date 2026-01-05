@@ -1,7 +1,10 @@
 #include "SceneHierarchyPanel.hpp"
 #include "ecs/Core.hpp"
 #include "ecs/Components/LightComponents.hpp"
+#include "ecs/Components/NameComponent.hpp"
 #include <imgui.h>
+#include <imgui_internal.h>
+#include <cstring>
 
 namespace Editor {
 
@@ -54,9 +57,20 @@ void SceneHierarchyPanel::OnImGuiRender() {
         if (ImGui::MenuItem("Create Empty Entity")) {
             auto entity = registry.create();
             registry.emplace<Engine::Transform>(entity);
+            registry.emplace<Engine::NameComponent>(entity).Name = "Empty Entity";
             m_Context->Select(entity);
         }
         ImGui::EndPopup();
+    }
+
+    // Drop target for making entities root (unparent)
+    if (ImGui::BeginDragDropTargetCustom(ImGui::GetCurrentWindow()->ContentRegionRect,
+                                          ImGui::GetCurrentWindow()->ID)) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_DRAG")) {
+            entt::entity droppedEntity = *static_cast<const entt::entity*>(payload->Data);
+            Engine::HierarchyUtils::DetachFromParent(registry, droppedEntity);
+        }
+        ImGui::EndDragDropTarget();
     }
 
     ImGui::End();
@@ -64,6 +78,33 @@ void SceneHierarchyPanel::OnImGuiRender() {
 
 void SceneHierarchyPanel::DrawEntityNode(entt::entity entity) {
     auto& registry = m_Context->Registry->Raw();
+
+    // Check if we're renaming this entity
+    if (m_RenamingEntity == entity) {
+        char buffer[256];
+        std::strncpy(buffer, m_RenameBuffer.c_str(), sizeof(buffer) - 1);
+        buffer[sizeof(buffer) - 1] = '\0';
+
+        ImGui::SetKeyboardFocusHere();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+
+        if (ImGui::InputText("##rename", buffer, sizeof(buffer),
+                            ImGuiInputTextFlags_EnterReturnsTrue |
+                            ImGuiInputTextFlags_AutoSelectAll)) {
+            // Apply new name
+            auto& name = registry.get_or_emplace<Engine::NameComponent>(entity);
+            name.Name = buffer;
+            m_RenamingEntity = entt::null;
+        }
+
+        // Cancel on escape or click outside
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+            (ImGui::IsMouseClicked(0) && !ImGui::IsItemHovered())) {
+            m_RenamingEntity = entt::null;
+        }
+
+        return;
+    }
 
     Engine::String label = GetEntityDisplayName(entity);
 
@@ -76,7 +117,6 @@ void SceneHierarchyPanel::DrawEntityNode(entt::entity entity) {
 
     // Tree node flags
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
-                               ImGuiTreeNodeFlags_OpenOnDoubleClick |
                                ImGuiTreeNodeFlags_SpanAvailWidth;
 
     if (m_Context->IsSelected(entity)) {
@@ -87,13 +127,18 @@ void SceneHierarchyPanel::DrawEntityNode(entt::entity entity) {
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     }
 
-    // Make it a bit smaller
     bool opened = ImGui::TreeNodeEx(reinterpret_cast<void*>(static_cast<Engine::u64>(entity)),
                                     flags, "%s", label.c_str());
 
-    // Selection
+    // Selection on single click
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         m_Context->Select(entity);
+    }
+
+    // Start rename on double-click (but not on arrow)
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+        m_RenamingEntity = entity;
+        m_RenameBuffer = label;
     }
 
     // Context menu
@@ -111,8 +156,7 @@ void SceneHierarchyPanel::DrawEntityNode(entt::entity entity) {
         if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_DRAG")) {
             entt::entity droppedEntity = *static_cast<const entt::entity*>(payload->Data);
             if (droppedEntity != entity) {
-                // TODO: Set parent-child relationship
-                // Engine::HierarchyUtils::SetParent(registry, droppedEntity, entity);
+                Engine::HierarchyUtils::SetParent(registry, droppedEntity, entity);
             }
         }
         ImGui::EndDragDropTarget();
@@ -156,7 +200,14 @@ void SceneHierarchyPanel::DrawEntityContextMenu(entt::entity entity) {
 Engine::String SceneHierarchyPanel::GetEntityDisplayName(entt::entity entity) {
     auto& registry = m_Context->Registry->Raw();
 
-    // Check for specific component types to give meaningful names
+    // First check if entity has a custom name
+    if (auto* name = registry.try_get<Engine::NameComponent>(entity)) {
+        if (!name->Name.empty()) {
+            return name->Name;
+        }
+    }
+
+    // Fallback: check for specific component types
     if (registry.all_of<Engine::DirectionalLightComponent>(entity)) {
         return "Directional Light";
     }

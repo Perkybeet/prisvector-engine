@@ -29,6 +29,7 @@ ViewportPanel::ViewportPanel(EditorCamera* camera, Engine::Framebuffer* framebuf
     , m_DebugRenderer(debugRenderer)
 {
     m_GridRenderer = Engine::CreateScope<Engine::GridRenderer>();
+    m_IconRenderer = Engine::CreateScope<Engine::EditorIconRenderer>();
 }
 
 void ViewportPanel::OnUpdate(Engine::f32 deltaTime) {
@@ -81,6 +82,15 @@ void ViewportPanel::RenderScene() {
     if (m_GridRenderer && m_GridRenderer->IsVisible()) {
         glm::mat4 vp = m_Camera->GetProjectionMatrix() * m_Camera->GetViewMatrix();
         m_GridRenderer->Render(vp, m_Camera->GetPosition());
+    }
+
+    // Render editor icons for entities without meshes
+    if (m_IconRenderer && m_IconRenderer->IsVisible()) {
+        glm::mat4 view = m_Camera->GetViewMatrix();
+        glm::mat4 projection = m_Camera->GetProjectionMatrix();
+        glm::vec3 cameraRight = glm::vec3(view[0][0], view[1][0], view[2][0]);
+        glm::vec3 cameraUp = glm::vec3(view[0][1], view[1][1], view[2][1]);
+        m_IconRenderer->Render(registry, view, projection, cameraRight, cameraUp);
     }
 
     // Debug overlay
@@ -147,6 +157,9 @@ void ViewportPanel::RenderGizmo() {
         }
     }
 
+    // Store original position for symmetry calculation
+    glm::vec3 originalPos = transform->Position;
+
     // Manipulate
     if (ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection),
                              operation, mode, glm::value_ptr(transformMatrix),
@@ -162,6 +175,30 @@ void ViewportPanel::RenderGizmo() {
         transform->SetRotation(rotation);
         transform->SetScale(scale);
         transform->UpdateWorldMatrix();
+
+        // Apply symmetry to other selected entities
+        auto& sym = m_Context->Symmetry;
+        if (sym.Enabled && (sym.MirrorX || sym.MirrorY || sym.MirrorZ)) {
+            glm::vec3 delta = translation - originalPos;
+
+            // Mirror the delta
+            glm::vec3 mirroredDelta = delta;
+            if (sym.MirrorX) mirroredDelta.x = -mirroredDelta.x;
+            if (sym.MirrorY) mirroredDelta.y = -mirroredDelta.y;
+            if (sym.MirrorZ) mirroredDelta.z = -mirroredDelta.z;
+
+            // Apply mirrored delta to other entities in multi-selection
+            for (auto entity : m_Context->MultiSelection) {
+                if (entity == m_Context->SelectedEntity) continue;
+
+                auto* otherTransform = registry.try_get<Engine::Transform>(entity);
+                if (otherTransform) {
+                    glm::vec3 otherPos = otherTransform->Position;
+                    otherTransform->SetPosition(otherPos + mirroredDelta);
+                    otherTransform->UpdateWorldMatrix();
+                }
+            }
+        }
     }
 }
 
@@ -202,7 +239,14 @@ void ViewportPanel::RenderViewportToolbar() {
         m_Context->CurrentGizmoSpace = (m_Context->CurrentGizmoSpace == GizmoSpace::World)
             ? GizmoSpace::Local : GizmoSpace::World;
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle World/Local space");
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::Text("Transform Space");
+        ImGui::Separator();
+        ImGui::TextDisabled("World: Axes aligned to global coordinates");
+        ImGui::TextDisabled("Local: Axes aligned to object orientation");
+        ImGui::EndTooltip();
+    }
 
     ImGui::SameLine();
     ImGui::Text("|");
@@ -210,6 +254,24 @@ void ViewportPanel::RenderViewportToolbar() {
 
     // Snap toggle
     ImGui::Checkbox("Snap", &m_Context->GizmoSnapping);
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::Text("Snap to Grid");
+        ImGui::Separator();
+        ImGui::TextDisabled("Constrain transformations to discrete steps");
+        switch (m_Context->CurrentGizmoMode) {
+            case GizmoMode::Translate:
+                ImGui::Text("Move: %.2f units", m_Context->TranslateSnapValue.x);
+                break;
+            case GizmoMode::Rotate:
+                ImGui::Text("Rotate: %.1f degrees", m_Context->RotateSnapValue);
+                break;
+            case GizmoMode::Scale:
+                ImGui::Text("Scale: %.2f", m_Context->ScaleSnapValue);
+                break;
+        }
+        ImGui::EndTooltip();
+    }
 
     if (m_Context->GizmoSnapping) {
         ImGui::SameLine();
@@ -226,6 +288,58 @@ void ViewportPanel::RenderViewportToolbar() {
                 ImGui::DragFloat("##snapS", &m_Context->ScaleSnapValue, 0.1f, 0.1f, 2.0f);
                 break;
         }
+    }
+
+    ImGui::SameLine();
+    ImGui::Text("|");
+    ImGui::SameLine();
+
+    // Symmetry toggle
+    bool& symEnabled = m_Context->Symmetry.Enabled;
+    if (symEnabled) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.3f, 0.6f, 1.0f));
+    if (ImGui::Button("Sym", ImVec2(32, buttonSize))) {
+        symEnabled = !symEnabled;
+    }
+    if (symEnabled) ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::Text("Symmetry Mode");
+        ImGui::Separator();
+        ImGui::TextDisabled("Mirror transformations across selected axes");
+        ImGui::TextDisabled("for symmetric modeling and editing");
+        ImGui::EndTooltip();
+    }
+
+    if (symEnabled) {
+        ImGui::SameLine();
+
+        // X axis toggle (red)
+        if (m_Context->Symmetry.MirrorX) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+        if (ImGui::Button("X", ImVec2(buttonSize, buttonSize))) {
+            m_Context->Symmetry.MirrorX = !m_Context->Symmetry.MirrorX;
+        }
+        if (m_Context->Symmetry.MirrorX) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Mirror across X axis (YZ plane)");
+
+        ImGui::SameLine();
+
+        // Y axis toggle (green)
+        if (m_Context->Symmetry.MirrorY) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
+        if (ImGui::Button("Y", ImVec2(buttonSize, buttonSize))) {
+            m_Context->Symmetry.MirrorY = !m_Context->Symmetry.MirrorY;
+        }
+        if (m_Context->Symmetry.MirrorY) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Mirror across Y axis (XZ plane)");
+
+        ImGui::SameLine();
+
+        // Z axis toggle (blue)
+        if (m_Context->Symmetry.MirrorZ) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.8f, 1.0f));
+        if (ImGui::Button("Z", ImVec2(buttonSize, buttonSize))) {
+            m_Context->Symmetry.MirrorZ = !m_Context->Symmetry.MirrorZ;
+        }
+        if (m_Context->Symmetry.MirrorZ) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Mirror across Z axis (XY plane)");
     }
 
     // Right section - Play/Pause/Stop
@@ -346,6 +460,30 @@ entt::entity ViewportPanel::PickEntity(const glm::vec2& mousePos) {
             if (hitDistance < closestDistance) {
                 closestDistance = hitDistance;
                 closestEntity = entity;
+            }
+        }
+    }
+
+    // Also check entities with icons (no mesh but have Transform)
+    if (m_IconRenderer && m_IconRenderer->IsVisible()) {
+        auto transformView = registry.view<Engine::Transform>();
+        for (auto entity : transformView) {
+            // Skip if already processed (has mesh)
+            if (registry.any_of<Engine::MeshComponent>(entity)) continue;
+
+            // Check if this entity has an icon
+            auto iconType = Engine::EditorIconRenderer::DetermineIconType(registry, entity);
+            if (iconType == Engine::EditorIconType::None) continue;
+
+            const auto& transform = transformView.get<Engine::Transform>(entity);
+            Engine::AABB iconBounds = m_IconRenderer->GetIconBounds(transform);
+
+            float hitDistance;
+            if (ray.IntersectsAABB(iconBounds, hitDistance)) {
+                if (hitDistance < closestDistance) {
+                    closestDistance = hitDistance;
+                    closestEntity = entity;
+                }
             }
         }
     }

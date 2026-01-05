@@ -5,6 +5,7 @@
 #include "resources/loaders/MeshLoader.hpp"
 #include "ecs/Core.hpp"
 #include "ecs/Components/LightComponents.hpp"
+#include "ecs/Components/NameComponent.hpp"
 
 // Panels
 #include "panels/ViewportPanel.hpp"
@@ -292,12 +293,14 @@ void EditorApplication::RenderMenuBar() {
             if (ImGui::MenuItem("Empty Entity")) {
                 auto entity = m_Registry.CreateEntity();
                 entity.AddComponent<Engine::Transform>();
+                entity.AddComponent<Engine::NameComponent>().Name = "Empty Entity";
                 m_EditorContext.Select(entity.GetHandle());
             }
             ImGui::Separator();
             if (ImGui::BeginMenu("3D Object")) {
                 if (ImGui::MenuItem("Cube")) {
                     auto entity = m_Registry.CreateEntity();
+                    entity.AddComponent<Engine::NameComponent>().Name = "Cube";
                     auto& t = entity.AddComponent<Engine::Transform>();
                     t.UpdateWorldMatrix();
                     auto& mc = entity.AddComponent<Engine::MeshComponent>();
@@ -316,6 +319,7 @@ void EditorApplication::RenderMenuBar() {
                 }
                 if (ImGui::MenuItem("Sphere")) {
                     auto entity = m_Registry.CreateEntity();
+                    entity.AddComponent<Engine::NameComponent>().Name = "Sphere";
                     auto& t = entity.AddComponent<Engine::Transform>();
                     t.UpdateWorldMatrix();
                     auto& mc = entity.AddComponent<Engine::MeshComponent>();
@@ -334,6 +338,7 @@ void EditorApplication::RenderMenuBar() {
                 }
                 if (ImGui::MenuItem("Plane")) {
                     auto entity = m_Registry.CreateEntity();
+                    entity.AddComponent<Engine::NameComponent>().Name = "Plane";
                     auto& t = entity.AddComponent<Engine::Transform>();
                     t.SetScale(glm::vec3(10.0f, 1.0f, 10.0f));
                     t.UpdateWorldMatrix();
@@ -353,6 +358,7 @@ void EditorApplication::RenderMenuBar() {
                 }
                 if (ImGui::MenuItem("Cylinder")) {
                     auto entity = m_Registry.CreateEntity();
+                    entity.AddComponent<Engine::NameComponent>().Name = "Cylinder";
                     auto& t = entity.AddComponent<Engine::Transform>();
                     t.UpdateWorldMatrix();
                     auto& mc = entity.AddComponent<Engine::MeshComponent>();
@@ -374,6 +380,7 @@ void EditorApplication::RenderMenuBar() {
             if (ImGui::BeginMenu("Light")) {
                 if (ImGui::MenuItem("Directional Light")) {
                     auto entity = m_Registry.CreateEntity();
+                    entity.AddComponent<Engine::NameComponent>().Name = "Directional Light";
                     entity.AddComponent<Engine::Transform>();
                     auto& light = entity.AddComponent<Engine::DirectionalLightComponent>();
                     light.Direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
@@ -384,6 +391,7 @@ void EditorApplication::RenderMenuBar() {
                 }
                 if (ImGui::MenuItem("Point Light")) {
                     auto entity = m_Registry.CreateEntity();
+                    entity.AddComponent<Engine::NameComponent>().Name = "Point Light";
                     auto& t = entity.AddComponent<Engine::Transform>();
                     t.SetPosition(glm::vec3(0.0f, 2.0f, 0.0f));
                     t.UpdateWorldMatrix();
@@ -395,6 +403,7 @@ void EditorApplication::RenderMenuBar() {
                 }
                 if (ImGui::MenuItem("Spot Light")) {
                     auto entity = m_Registry.CreateEntity();
+                    entity.AddComponent<Engine::NameComponent>().Name = "Spot Light";
                     auto& t = entity.AddComponent<Engine::Transform>();
                     t.SetPosition(glm::vec3(0.0f, 5.0f, 0.0f));
                     t.UpdateWorldMatrix();
@@ -410,6 +419,7 @@ void EditorApplication::RenderMenuBar() {
                 }
                 if (ImGui::MenuItem("Ambient Light")) {
                     auto entity = m_Registry.CreateEntity();
+                    entity.AddComponent<Engine::NameComponent>().Name = "Ambient Light";
                     entity.AddComponent<Engine::Transform>();
                     auto& light = entity.AddComponent<Engine::AmbientLightComponent>();
                     light.Color = glm::vec3(0.1f);

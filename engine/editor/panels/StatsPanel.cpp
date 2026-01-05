@@ -10,10 +10,30 @@ namespace Editor {
 void StatsPanel::OnImGuiRender() {
     ImGui::Begin("Statistics");
 
+    // Update FPS smoothing
+    Engine::f32 deltaTime = Engine::Time::GetDeltaTime();
+    m_FrameTimes.push_back(deltaTime);
+    if (m_FrameTimes.size() > SampleCount) {
+        m_FrameTimes.erase(m_FrameTimes.begin());
+    }
+
+    Engine::f32 currentTime = Engine::Time::GetTime();
+    if (currentTime - m_LastFPSUpdate >= UpdateInterval) {
+        if (!m_FrameTimes.empty()) {
+            Engine::f32 sum = 0.0f;
+            for (Engine::f32 dt : m_FrameTimes) {
+                sum += dt;
+            }
+            m_SmoothedFPS = static_cast<Engine::f32>(m_FrameTimes.size()) / sum;
+            m_SmoothedFrameTime = (sum / static_cast<Engine::f32>(m_FrameTimes.size())) * 1000.0f;
+        }
+        m_LastFPSUpdate = currentTime;
+    }
+
     // Frame stats
     if (ImGui::CollapsingHeader("Performance", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("FPS: %.1f", Engine::Time::GetFPS());
-        ImGui::Text("Frame Time: %.2f ms", Engine::Time::GetDeltaTime() * 1000.0f);
+        ImGui::Text("FPS: %.1f", m_SmoothedFPS);
+        ImGui::Text("Frame Time: %.2f ms", m_SmoothedFrameTime);
         ImGui::Text("Total Time: %.1f s", Engine::Time::GetTime());
     }
 
