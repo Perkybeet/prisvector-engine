@@ -108,4 +108,4 @@ This project is proprietary software. See [LICENSE](LICENSE) for terms.
 
 ## Author
 
-Yago
+Yago López prado @Perkybeet
